@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DNCC Civic Survey — Ward Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<style>
+  :root {
+    --ink: #1d232b; --ink-2: #4a5562; --muted: #78828e; --line: #e3e6ea;
+    --bg: #f6f7f9; --panel: #ffffff; --accent: #1f5fa8; --sel: #111; --wardink: #0b2a63;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font: 14px/1.45 "Segoe UI", system-ui, -apple-system, "Nirmala UI", "Noto Sans Bengali", sans-serif; color: var(--ink); background: var(--bg); }
+  .topbar { height: 52px; display: flex; align-items: center; gap: 18px; padding: 0 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .brand b { font-size: 16px; display: block; line-height: 1.1; }
+  .brand span { font-size: 11.5px; color: var(--muted); }
+  .tabs { display: flex; gap: 4px; margin-left: 12px; }
+  .tabs button { border: 0; background: transparent; padding: 8px 14px; border-radius: 8px; font: inherit; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+  .tabs button:hover { background: #f0f2f5; }
+  .tabs button.on { background: #eef4fb; color: var(--accent); }
+  .topbar .updated { margin-left: auto; }
+  .app { display: grid; grid-template-columns: 380px 1fr; height: calc(100vh - 52px); }
+  .survview { height: calc(100vh - 52px); overflow: auto; padding: 18px 22px 30px; }
+  .survview[hidden], .app[hidden] { display: none; }
+  .tablewrap { margin-top: 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: auto; }
+  .stbl { border-collapse: collapse; width: 100%; font-size: 13px; }
+  .stbl th { position: sticky; top: 0; background: #f2f4f6; text-align: left; font-size: 12px; color: var(--ink-2); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .stbl td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .stbl tr:hover td { background: #fafbfc; }
+  .stbl .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stbl .rej { color: #b3261e; font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip { display: inline-block; padding: 1px 7px; border-radius: 10px; background: #eef1f4; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; border: 1px solid transparent; }
+  .chip.out { background: #fff; border: 1px dashed #8a6d00; color: #6b5400; }
+  .chip.low { background: #fde3e1; color: #b3261e; font-weight: 600; border-color: #f3b7b1; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 18px 18px 28px; }
+  #map { height: 100%; background: #e9edf1; }
+  h1 { font-size: 18px; margin: 0 0 2px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+  .updated { display: inline-block; background: #eef4fb; color: var(--accent); border-radius: 6px; padding: 3px 8px; font-size: 12px; font-weight: 600; }
+  .hero { display: flex; gap: 10px; margin: 14px 0 6px; }
+  .stat { flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); margin: 20px 0 8px; }
+  label.f { display: block; font-size: 12.5px; color: var(--ink-2); margin: 8px 0 3px; }
+  select { width: 100%; padding: 6px 8px; border: 1px solid #cfd5db; border-radius: 7px; background: #fff; font: inherit; color: var(--ink); }
+  .seg { display: flex; border: 1px solid #cfd5db; border-radius: 8px; overflow: hidden; }
+  .seg button { flex: 1; border: 0; background: #fff; padding: 6px 4px; font: inherit; font-size: 13px; cursor: pointer; color: var(--ink-2); }
+  .seg button + button { border-left: 1px solid #cfd5db; }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .check { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; cursor: pointer; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .row-btns { display: flex; gap: 8px; margin-top: 12px; }
+  .btn { border: 1px solid #cfd5db; background: #fff; border-radius: 7px; padding: 5px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
+  .btn:hover { background: #f2f4f6; }
+  /* attribute panel, GIS "identify" style */
+  .attr { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-top: 6px; }
+  .attr .title { background: #f2f4f6; padding: 8px 10px; font-weight: 600; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+  .attr .grp { padding: 6px 10px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border-top: 1px solid var(--line); }
+  .attr .kv { display: grid; grid-template-columns: 1fr auto 52px; gap: 8px; padding: 3px 10px; font-size: 13px; }
+  .attr .kv:nth-child(even) { background: #fafbfc; }
+  .attr .kv .v { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+  .attr .kv .p { font-variant-numeric: tabular-nums; color: var(--muted); text-align: right; font-size: 12px; }
+  .hint { font-size: 12.5px; color: var(--muted); }
+  #lock { position: fixed; inset: 0; z-index: 10000; background: var(--bg); display: flex; align-items: center; justify-content: center; }
+  .lockbox { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px 28px 20px; width: min(360px, 92vw); box-shadow: 0 6px 24px rgba(0,0,0,.08); }
+  .lockbox input { width: 100%; padding: 9px 11px; border: 1px solid #cfd5db; border-radius: 8px; font: inherit; margin: 6px 0 10px; }
+  .lockbox button { width: 100%; padding: 9px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  .lockbox button:disabled { opacity: .6; cursor: default; }
+  .lockmsg { min-height: 1.2em; font-size: 13px; color: #b3261e; margin: 10px 0 0; }
+  .basemap { filter: grayscale(1) brightness(1.06) contrast(.85); opacity: .75; }
+  /* map labels */
+  .wlabel { background: transparent; border: 0; pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  .wlabel .n { font-weight: 700; font-size: 12px; color: var(--wardink); white-space: nowrap; line-height: 1;
+               text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff; }
+  .wlabel .dot { border-radius: 50%; background: #fff; border: 2px solid var(--wardink); color: var(--wardink);
+                 font-weight: 700; font-size: 11px; display: flex; align-items: center; justify-content: center;
+                 font-variant-numeric: tabular-nums; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+  .wlabel.dim .n { opacity: .45; }
+  .legend { background: rgba(255,255,255,.95); padding: 8px 10px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.15); font-size: 12px; line-height: 1.6; }
+  .legend .t { font-weight: 600; margin-bottom: 2px; }
+  .sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.25); }
+  @media (max-width: 820px) { .brand span { display: none; } .topbar .updated { display: none; }
+    .app { grid-template-columns: 1fr; grid-template-rows: 55vh auto; height: auto; } #map { height: 55vh; order: -1; } aside { border-right: 0; } }
+</style>
+</head>
+<body>
+<div id="lock">
+  <form id="lockForm" class="lockbox" autocomplete="off">
+    <h1>DNCC Civic Survey</h1>
+    <p class="sub">Ward dashboard · enter the password to continue</p>
+    <input id="pw" type="password" placeholder="Password" autofocus required>
+    <button type="submit">Open dashboard</button>
+    <p id="lockMsg" class="lockmsg"></p>
+  </form>
+</div>
+<header class="topbar">
+  <div class="brand"><b>DNCC Civic Survey</b><span>Dhaka North City Corporation</span></div>
+  <nav class="tabs" id="tabs">
+    <button data-tab="map" class="on">Ward map</button><button data-tab="surveyors">Surveyors</button>
+  </nav>
+  <span class="updated" id="updated">Loading…</span>
+</header>
+
+<section class="survview" id="survView" hidden>
+  <div class="survhead">
+    <h2 style="margin:0">Surveyors</h2>
+    <p class="note" style="margin:4px 0 0">Female % is of accepted interviews in each ward; <span class="chip low">red</span> = below 30%.
+      Wards covered: <span class="chip out">dashed</span> = outside the team's assigned wards.</p>
+  </div>
+  <div class="tablewrap"><table class="stbl" id="survTable"></table></div>
+</section>
+
+<div class="app" id="mapView">
+  <aside>
+    <div class="hero" style="margin-top:0">
+      <div class="stat"><b id="sMatch">–</b><span>matching filters</span></div>
+      <div class="stat"><b id="sAcc">–</b><span>accepted interviews</span></div>
+      <div class="stat"><b id="sWards">–</b><span>wards covered</span></div>
+    </div>
+
+    <h2>Filters</h2>
+    <label class="f" for="fWard">Ward</label>
+    <select id="fWard"><option value="all">All wards</option></select>
+
+    <label class="f">Gender</label>
+    <div class="seg" id="fGender">
+      <button data-v="all" class="on">All</button><button data-v="Female">Female</button><button data-v="Male">Male</button>
+    </div>
+
+    <label class="f" for="fAge">Age group</label>
+    <select id="fAge">
+      <option value="all">All ages</option>
+      <option>18-24</option><option>25-34</option><option>35-44</option>
+      <option>45-54</option><option>55-64</option><option>65+</option>
+    </select>
+    <label class="check"><input type="checkbox" id="fStudent"> Students aged 18–24 only</label>
+
+    <label class="f" for="fVoter">Voter status (Q7)</label>
+    <select id="fVoter">
+      <option value="all">Everyone</option>
+      <option value="registered">Registered voter (this area or elsewhere)</option>
+      <option value="here">Registered in this area</option>
+      <option value="elsewhere">Registered elsewhere</option>
+      <option value="not">Not registered</option>
+    </select>
+
+    <label class="f" for="fVote">Voting (Q8)</label>
+    <select id="fVote">
+      <option value="all">Everyone</option>
+      <option value="voted">Votes</option>
+      <option value="not">Does not vote</option>
+    </select>
+    <label class="f">Count “sometimes” (মাঝে মাঝে যাই) as</label>
+    <div class="seg" id="fSometimes">
+      <button data-v="voted" class="on">Votes</button><button data-v="not">Does not vote</button>
+    </div>
+    <p class="note">Votes = প্রায় সবসময় যাই (+ মাঝে মাঝে যাই if chosen). Does not vote = কখনো যাই না, এখনো সুযোগ হয়নি (+ মাঝে মাঝে যাই if chosen).</p>
+
+    <div class="row-btns"><button class="btn" id="reset">Reset filters</button></div>
+
+    <h2>Map colour</h2>
+    <div class="seg" id="fColour">
+      <button data-v="team" class="on">Team colours</button><button data-v="count">Number of interviews</button>
+    </div>
+
+    <h2>Ward attributes</h2>
+    <div class="row-btns"><button class="btn" id="clearSel">Clear selection</button></div>
+    <div class="attr" id="attr"></div>
+  </aside>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+const AGES = ["18-24", "25-34", "35-44", "45-54", "55-64", "65+"];
+const RAMP = ["#dbe8f5", "#aecbe6", "#78a8d3", "#4581bd", "#1f569a"];   // one hue, light -> dark
+const state = { ward: "all", gender: "all", age: "all", student: false, voter: "all", vote: "all", sometimes: "voted", colour: "team" };
+const selected = new Set();
+let DATA, GEO, map, layers = {}, labels = {}, legend;
+
+const isVoted = v => v === "always" || (v === "sometimes" && state.sometimes === "voted");
+const isNotVoted = v => v === "never" || v === "no_chance" || (v === "sometimes" && state.sometimes === "not");
+const isRegistered = v => v === "Voter here" || v === "Voter elsewhere";
+
+function match(r) {   // r = {ward, gender, age, student, voter, vote, n}
+  if (state.ward !== "all" && r.ward !== +state.ward) return false;
+  if (state.gender !== "all" && r.gender !== state.gender) return false;
+  if (state.age !== "all" && r.age !== state.age) return false;
+  if (state.student && !(r.student === 1 && r.age === "18-24")) return false;
+  if (state.voter === "registered" && !isRegistered(r.voter)) return false;
+  if (state.voter === "here" && r.voter !== "Voter here") return false;
+  if (state.voter === "elsewhere" && r.voter !== "Voter elsewhere") return false;
+  if (state.voter === "not" && r.voter !== "Not registered") return false;
+  if (state.vote === "voted" && !isVoted(r.vote)) return false;
+  if (state.vote === "not" && !isNotVoted(r.vote)) return false;
+  return true;
+}
+
+function emptyAgg() {
+  return { n: 0, female: 0, male: 0, third: 0, ages: Object.fromEntries(AGES.map(a => [a, 0])), students: 0,
+           here: 0, elsewhere: 0, notreg: 0, voted: 0, notvoted: 0, regVoted: 0, regNotVoted: 0, notAsked: 0, noAnswer: 0 };
+}
+function add(a, r) {
+  const n = r.n; a.n += n;
+  if (r.gender === "Female") a.female += n; else if (r.gender === "Male") a.male += n; else if (r.gender === "Third gender") a.third += n;
+  if (a.ages[r.age] !== undefined) a.ages[r.age] += n;
+  if (r.student === 1 && r.age === "18-24") a.students += n;
+  if (r.voter === "Voter here") a.here += n; else if (r.voter === "Voter elsewhere") a.elsewhere += n; else if (r.voter === "Not registered") a.notreg += n;
+  if (isVoted(r.vote)) { a.voted += n; if (isRegistered(r.voter)) a.regVoted += n; }
+  if (isNotVoted(r.vote)) { a.notvoted += n; if (isRegistered(r.voter)) a.regNotVoted += n; }
+  // Q8 is skipped by the form for people who are not registered
+  if (r.vote === "missing" && r.voter === "Not registered") a.notAsked += n;
+  else if (!isVoted(r.vote) && !isNotVoted(r.vote)) a.noAnswer += n;
+}
+
+function aggregate() {
+  const byWard = {}, total = emptyAgg();
+  let all = 0;
+  for (const r of DATA.rows) {
+    all += r.n;
+    if (!match(r)) continue;
+    add(byWard[r.ward] ||= emptyAgg(), r);
+    add(total, r);
+  }
+  return { byWard, total, all };
+}
+
+function fill(n, max) {
+  if (!n) return "#eeeeee";
+  const i = Math.min(RAMP.length - 1, Math.floor((n / Math.max(1, max)) * RAMP.length - 1e-9));
+  return RAMP[Math.max(0, i)];
+}
+
+function render() {
+  const { byWard, total } = aggregate();
+  const counts = GEO.features.map(f => (byWard[f.properties.ward] || {}).n || 0);
+  const max = Math.max(1, ...counts);
+  for (const f of GEO.features) {
+    const w = f.properties.ward, n = (byWard[w] || {}).n || 0, sel = selected.has(w);
+    const dim = state.ward !== "all" && +state.ward !== w;
+    layers[w].setStyle({
+      fillColor: state.colour === "team" ? f.properties.colour : fill(n, max),
+      fillOpacity: dim ? .12 : state.colour === "team" ? (sel ? .8 : .5) : (sel ? .95 : .85),
+      color: sel ? "#000" : "#333", weight: sel ? 3.5 : 1, opacity: dim ? .35 : sel ? 1 : .8,
+    });
+    if (sel) layers[w].bringToFront();
+    // count circle: size grows with the count (area ~ count)
+    const d = n ? Math.round(20 + 18 * Math.sqrt(n / max)) : 0;
+    const dot = n ? `<div class="dot" style="width:${d}px;height:${d}px">${n}</div>` : "";
+    labels[w].setIcon(L.divIcon({ className: "wlabel" + (dim ? " dim" : ""), iconSize: [80, 22 + d], iconAnchor: [40, (22 + d) / 2],
+      html: `<div class="n">Ward ${w}</div>${dot}` }));
+    layers[w].setTooltipContent(`<b>Ward ${w}</b> · Team ${f.properties.team} (${f.properties.team_name})<br>${n} matching interview${n === 1 ? "" : "s"}`);
+  }
+  document.getElementById("sMatch").textContent = total.n;
+  document.getElementById("sAcc").textContent = DATA.meta.accepted;
+  document.getElementById("sWards").textContent = Object.keys(byWard).length;
+  renderLegend(max);
+  renderAttr(byWard, total);
+}
+
+function renderLegend(max) {
+  let h;
+  if (state.colour === "team") {
+    const teams = {};
+    GEO.features.forEach(f => teams[f.properties.team] = [f.properties.colour, f.properties.team_name]);
+    h = `<div class="t">Survey teams</div>` + Object.entries(teams).sort((a, b) => a[0] - b[0])
+      .map(([t, [c, nm]]) => `<div><span class="sw" style="background:${c}"></span>Team ${t} · ${nm}</div>`).join("");
+  } else {
+    const step = max / RAMP.length;
+    h = `<div class="t">Matching interviews</div><div><span class="sw" style="background:#eeeeee"></span>0</div>` +
+      RAMP.map((c, i) => `<div><span class="sw" style="background:${c}"></span>${Math.floor(i * step) + 1}–${Math.round((i + 1) * step)}</div>`).join("");
+  }
+  legend.getContainer().innerHTML = h;
+}
+
+function pct(v, n) { return n ? Math.round(100 * v / n) + "%" : ""; }
+function kv(k, v, n) { return `<div class="kv"><span>${k}</span><span class="v">${v}</span><span class="p">${n === undefined ? "" : pct(v, n)}</span></div>`; }
+
+function renderAttr(byWard, total) {
+  const ws = [...selected].sort((a, b) => a - b);
+  let a, title, info = "";
+  if (!ws.length) { a = total; title = "All DNCC wards"; }
+  else {
+    a = emptyAgg();
+    for (const w of ws) { const b = byWard[w]; if (!b) continue;
+      for (const k in a) { if (k === "ages") AGES.forEach(x => a.ages[x] += b.ages[x]); else a[k] += b[k]; } }
+    title = ws.length === 1 ? `Ward ${ws[0]}` : `${ws.length} wards: ${ws.join(", ")}`;
+    const feats = GEO.features.filter(f => selected.has(f.properties.ward));
+    const col = feats.reduce((s, f) => s + (DATA.ward_totals[f.properties.ward] || {}).collected, 0);
+    const rej = feats.reduce((s, f) => s + (DATA.ward_totals[f.properties.ward] || {}).rejected, 0);
+    const area = feats.reduce((s, f) => s + (f.properties.area_km2 || 0), 0);
+    const teams = [...new Set(feats.map(f => `Team ${f.properties.team} (${f.properties.team_name})`))].join(", ");
+    info = `<div class="grp">Ward</div>` + kv("Survey team", `<span style="font-weight:500">${teams}</span>`) +
+      kv("Area (km²)", area.toFixed(2)) + kv("Interviews collected", col) + kv("Rejected", rej) + kv("Accepted", col - rej);
+  }
+  const n = a.n;
+  document.getElementById("attr").innerHTML =
+    `<div class="title"><span>${title}</span><span>${n} matching</span></div>` + info +
+    `<div class="grp">Gender</div>` + kv("Female", a.female, n) + kv("Male", a.male, n) + (a.third ? kv("Third gender", a.third, n) : "") +
+    `<div class="grp">Age</div>` + AGES.map(x => kv(x, a.ages[x], n)).join("") + kv("Students aged 18–24", a.students, n) +
+    `<div class="grp">Voter status</div>` + kv("Registered in this area", a.here, n) + kv("Registered elsewhere", a.elsewhere, n) + kv("Not registered", a.notreg, n) +
+    `<div class="grp">Voting</div>` + kv("Votes", a.voted, n) + kv("Does not vote", a.notvoted, n) +
+    (a.notAsked ? kv("Not asked (not registered)", a.notAsked, n) : "") + (a.noAnswer ? kv("Refused / no answer", a.noAnswer, n) : "") +
+    kv("Registered voter, votes", a.regVoted, n) + kv("Registered voter, does not vote", a.regNotVoted, n);
+}
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function renderSurveyors() {
+  const teamColour = {}, teamName = {};
+  GEO.features.forEach(f => { teamColour[f.properties.team] = f.properties.colour; teamName[f.properties.team] = f.properties.team_name; });
+  const LOW = 30;
+  const femChip = (w, [f, n]) => {
+    const p = n ? Math.round(100 * f / n) : 0;
+    return `<span class="chip${n && p < LOW ? " low" : ""}" title="${f} female of ${n} accepted">W${w}: ${p}%</span>`;
+  };
+  const rows = (DATA.surveyors || []).map(s => {
+    const assigned = new Set(s.assigned);
+    const covered = s.covered.map(([w, n]) => `<span class="chip${assigned.has(w) ? "" : " out"}" title="${n} interview(s)">W${w} (${n})</span>`).join("");
+    const fem = Object.entries(s.female_by_ward).map(([w, v]) => femChip(w, v)).join("");
+    const [f, n] = s.female, fp = n ? Math.round(100 * f / n) : 0;
+    const pct = v => s.total ? ` <span class="p" style="color:var(--muted);font-size:11.5px">${Math.round(100 * v / s.total)}%</span>` : "";
+    return `<tr>
+      <td><b>${esc(s.name)}</b></td>
+      <td style="white-space:nowrap"><span class="sw" style="background:${teamColour[s.team] || "#ccc"}"></span>Team ${s.team ?? "?"} · ${teamName[s.team] || ""}</td>
+      <td style="min-width:270px"><div class="chips">${s.assigned.map(w => `<span class="chip">W${w}</span>`).join("")}</div></td>
+      <td><div class="chips">${covered || '<span class="note">none yet</span>'}</div></td>
+      <td class="num">${s.total}</td>
+      <td class="num">${s.accepted}${pct(s.accepted)}</td>
+      <td class="num rej">${s.rejected}${pct(s.rejected)}</td>
+      <td class="num"><span class="chip${n && fp < LOW ? " low" : ""}">${n ? fp + "%" : "–"}</span></td>
+      <td><div class="chips">${fem || '<span class="note">–</span>'}</div></td>
+    </tr>`;
+  }).join("");
+  document.getElementById("survTable").innerHTML = `<thead><tr>
+      <th>Surveyor</th><th>Team</th><th>Wards assigned</th><th>Wards covered (interviews)</th>
+      <th class="num">Submitted</th><th class="num">Accepted</th><th class="num">Rejected</th>
+      <th class="num">Female % (all)</th><th>Female % by ward</th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+function seg(id, key) {
+  const el = document.getElementById(id);
+  el.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    el.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    state[key] = b.dataset.v; render();
+  });
+}
+
+// ---------- password lock: the data file is AES-256-GCM encrypted; the key comes from the password
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function decrypt(enc, password) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+  const key = await crypto.subtle.deriveKey({ name: "PBKDF2", hash: "SHA-256", salt: b64(enc.salt), iterations: enc.iter },
+    base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(enc.iv) }, key, b64(enc.ct));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+// The password is never stored (no cookie / storage): every page load or refresh asks again.
+async function unlock(password) {
+  const enc = await fetch("data/data.enc.json", { cache: "no-store" }).then(r => r.json());
+  let bundle;
+  try { bundle = await decrypt(enc, password); } catch { return false; }
+  document.getElementById("pw").value = "";
+  document.getElementById("lock").remove();
+  await init(bundle.geo, bundle.data);
+  return true;
+}
+document.getElementById("lockForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector("button"), msg = document.getElementById("lockMsg");
+  btn.disabled = true; msg.textContent = "Checking…";
+  const ok = await unlock(document.getElementById("pw").value).catch(err => { msg.textContent = "Could not load: " + err.message; return null; });
+  if (ok === false) { msg.textContent = "Wrong password."; btn.disabled = false; document.getElementById("pw").select(); }
+});
+try { sessionStorage.removeItem("dncc_pw"); } catch {}   // clear what older versions of this page saved
+
+async function init(geo, data) {
+  GEO = geo;
+  DATA = data;
+  DATA.rows = data.rows.map(r => Object.fromEntries(data.fields.map((f, i) => [f, r[i]])));
+  document.getElementById("updated").textContent = "Last updated: " + data.meta.updated_label;
+
+  map = L.map("map", { zoomSnap: .25 });
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19, className: "basemap" }).addTo(map);
+  const group = L.geoJSON(geo, {
+    onEachFeature: (f, layer) => {
+      const w = f.properties.ward;
+      layers[w] = layer;
+      layer.bindTooltip("", { sticky: true });
+      layer.on("click", () => { selected.has(w) ? selected.delete(w) : selected.add(w); render(); });
+      const [x, y] = f.properties.label;
+      labels[w] = L.marker([y, x], { interactive: false, keyboard: false }).addTo(map);
+    }
+  }).addTo(map);
+  map.fitBounds(group.getBounds(), { padding: [10, 10] });
+  legend = L.control({ position: "bottomright" });
+  legend.onAdd = () => L.DomUtil.create("div", "legend");
+  legend.addTo(map);
+
+  const fWard = document.getElementById("fWard");
+  geo.features.map(f => f.properties).sort((a, b) => a.ward - b.ward).forEach(p =>
+    fWard.add(new Option(`Ward ${p.ward} · Team ${p.team} (${p.team_name})`, p.ward)));
+  fWard.onchange = e => {
+    state.ward = e.target.value;
+    map.fitBounds(state.ward === "all" ? group.getBounds() : layers[+state.ward].getBounds(), { padding: [30, 30] });
+    render();
+  };
+  seg("fGender", "gender"); seg("fSometimes", "sometimes"); seg("fColour", "colour");
+  document.getElementById("fAge").onchange = e => { state.age = e.target.value; render(); };
+  document.getElementById("fStudent").onchange = e => { state.student = e.target.checked; render(); };
+  document.getElementById("fVoter").onchange = e => { state.voter = e.target.value; render(); };
+  document.getElementById("fVote").onchange = e => { state.vote = e.target.value; render(); };
+  document.getElementById("clearSel").onclick = () => { selected.clear(); render(); };
+
+  // ---- tabs: Ward map / Surveyors
+  renderSurveyors();
+  document.getElementById("tabs").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
+    const surv = b.dataset.tab === "surveyors";
+    document.getElementById("survView").hidden = !surv;
+    document.getElementById("mapView").hidden = surv;
+    if (!surv) map.invalidateSize();
+  });
+  document.getElementById("reset").onclick = () => {
+    Object.assign(state, { ward: "all", gender: "all", age: "all", student: false, voter: "all", vote: "all", sometimes: "voted" });
+    ["fWard", "fAge", "fVoter", "fVote"].forEach(id => document.getElementById(id).value = "all");
+    map.fitBounds(group.getBounds(), { padding: [10, 10] });
+    document.getElementById("fStudent").checked = false;
+    for (const [id, v] of [["fGender", "all"], ["fSometimes", "voted"]])
+      document.querySelectorAll(`#${id} button`).forEach(b => b.classList.toggle("on", b.dataset.v === v));
+    render();
+  };
+  render();
+}
+</script>
+</body>
+</html>
