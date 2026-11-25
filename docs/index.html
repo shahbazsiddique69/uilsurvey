@@ -171,7 +171,7 @@
 <header class="topbar">
   <div class="brand"><b>DNCC Civic Survey</b><span>Dhaka North City Corporation</span></div>
   <nav class="tabs" id="tabs">
-    <button data-tab="map" class="on">Ward map</button><button data-tab="quotas">Ward quotas</button><button data-tab="surveyors">Surveyors</button><button data-tab="files">Excel files</button>
+    <button data-tab="map" class="on">Ward map</button><button data-tab="quotas">Ward quotas</button><button data-tab="surveyors">Surveyors</button>
   </nav>
   <span class="updated" id="updated">Loading…</span>
 </header>
@@ -179,7 +179,7 @@
 <section class="survview" id="quotaView" hidden>
   <h2 style="margin:0">Ward quotas</h2>
   <p class="note" style="margin:4px 0 0">Each ward: up to <b>60</b> accepted interviews — <b>15</b> in each of the four groups below,
-    and at least <b>30% female (18 of 60)</b>. Groups count registered voters only; people who are not registered or did not answer Q8
+    and at least <b>30% female (18 of 60)</b>. Only registered voters are accepted (not registered = rejected, rule R13); accepted people who did not answer Q8
     still count toward the 60 and the female share.</p>
   <div class="toolbar">
     <span class="note" style="margin:0">Count “sometimes” (মাঝে মাঝে যাই) as</span>
@@ -199,14 +199,6 @@
       <b>Report</b> opens a printable report for any date range, which can be downloaded as PDF.</p>
   </div>
   <div class="tablewrap"><table class="stbl" id="survTable"></table></div>
-</section>
-
-<section class="survview" id="filesView" hidden>
-  <h2 style="margin:0">Excel files</h2>
-  <p class="note" style="margin:4px 0 0">The hand-checked Excel of each day (the newest run of that day), exactly as reviewed —
-    with the Reject ticks, all answers and household GPS. Downloads are decrypted in your browser.
-    <b>Contains respondents' personal data: do not forward.</b></p>
-  <div class="tablewrap"><table class="stbl" id="filesTable"></table></div>
 </section>
 
 <div id="reportView" hidden>
@@ -541,31 +533,6 @@ function renderQuotas() {
     ${GROUPS.map(([, l]) => `<th>${l} (15)</th>`).join("")}<th>Female (18 = 30%)</th><th>Still needed — focus here</th></tr></thead><tbody>${body}</tbody>`;
 }
 
-// ====================================================================== Excel files
-function fmtSize(b) { return b > 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.round(b / 1e3) + " KB"; }
-function renderFiles() {
-  const files = DATA.files || [];
-  document.getElementById("filesTable").innerHTML = `<thead><tr><th>Date</th><th>File</th><th>Last saved</th>
-    <th class="num">Submissions</th><th class="num">Accepted</th><th class="num">Rejected</th><th class="num">Size</th><th></th></tr></thead><tbody>` +
-    files.map((f, i) => `<tr><td><b>${f.date}</b>${i === 0 ? ' <span class="st good">latest</span>' : ""}</td><td>${esc(f.name)}</td><td>${f.saved}</td>
-      <td class="num">${f.submissions}</td><td class="num">${f.accepted}</td><td class="num rej">${f.rejected}</td><td class="num">${fmtSize(f.size)}</td>
-      <td><button class="btn primary" data-file="${i}">Download</button></td></tr>`).join("") + "</tbody>";
-}
-async function downloadFile(i, btn) {
-  const f = DATA.files[i], old = btn.textContent;
-  btn.disabled = true; btn.textContent = "Decrypting…";
-  try {
-    const buf = new Uint8Array(await fetch(f.path, { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }));
-    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(0, 12) }, KEY, buf.slice(12));
-    const url = URL.createObjectURL(new Blob([plain], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-    const a = Object.assign(document.createElement("a"), { href: url, download: f.name });
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-    btn.textContent = old;
-  } catch (e) { btn.textContent = "Failed - retry"; console.error(e); }
-  btn.disabled = false;
-}
-
 // ====================================================================== surveyor report
 let REPORT_USER = null;
 function openReport(user) {
@@ -708,10 +675,8 @@ async function decrypt(enc, password) {
   const key = await crypto.subtle.deriveKey({ name: "PBKDF2", hash: "SHA-256", salt: b64(enc.salt), iterations: enc.iter },
     base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
   const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(enc.iv) }, key, b64(enc.ct));
-  KEY = key;   // kept in memory only (never stored), for the Excel downloads
   return JSON.parse(new TextDecoder().decode(plain));
 }
-let KEY = null;
 // The password is never stored (no cookie / storage): every page load or refresh asks again.
 async function unlock(password) {
   const enc = await fetch("data/data.enc.json", { cache: "no-store" }).then(r => r.json());
@@ -772,11 +737,11 @@ async function init(geo, data) {
   document.getElementById("fVote").onchange = e => { state.vote = e.target.value; render(); };
   document.getElementById("clearSel").onclick = () => { selected.clear(); render(); };
 
-  // ---- tabs: Ward map / Ward quotas / Surveyors / Excel files
-  renderSurveyors(); renderQuotas(); renderFiles();
+  // ---- tabs: Ward map / Ward quotas / Surveyors
+  renderSurveyors(); renderQuotas();
   seg("qSometimes", "sometimes");
   document.getElementById("qAll").onchange = renderQuotas;
-  const VIEWS = { map: "mapView", quotas: "quotaView", surveyors: "survView", files: "filesView" };
+  const VIEWS = { map: "mapView", quotas: "quotaView", surveyors: "survView" };
   document.getElementById("tabs").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
@@ -785,9 +750,6 @@ async function init(geo, data) {
   });
   document.getElementById("survTable").addEventListener("click", e => {
     const b = e.target.closest("[data-report]"); if (b) openReport(b.dataset.report);
-  });
-  document.getElementById("filesTable").addEventListener("click", e => {
-    const b = e.target.closest("[data-file]"); if (b) downloadFile(+b.dataset.file, b);
   });
   for (const id of ["rFrom", "rTo"]) document.getElementById(id).onchange = renderReport;
   document.getElementById("rClose").onclick = () => { document.getElementById("reportView").hidden = true; };
