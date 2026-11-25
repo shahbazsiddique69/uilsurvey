@@ -535,6 +535,10 @@ function renderQuotas() {
 
 // ====================================================================== surveyor report
 let REPORT_USER = null;
+// "2026-11-22" -> "22 Nov" (chart) / "22 Nov 2026" (tables, period)
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const dayShort = d => d ? `${+d.slice(8, 10)} ${MONTHS[+d.slice(5, 7) - 1]}` : "";
+const dayLong = d => d ? `${dayShort(d)} ${d.slice(0, 4)}` : "";
 function openReport(user) {
   REPORT_USER = user;
   const dates = SUBS.map(s => s.date).filter(Boolean).sort();
@@ -564,7 +568,7 @@ function renderReport() {
   const dayChart = days.length ? `
     <div class="vchart">${perDay.map(([d, a, r]) => `<div class="col"><div class="lbl">${a + r}</div>
         <i style="height:${120 * r / maxDay}px;background:${C.rej}"></i><i style="height:${120 * a / maxDay}px;background:${C.acc}"></i></div>`).join("")}</div>
-    <div class="vx">${perDay.map(([d]) => `<span>${d.slice(5)}</span>`).join("")}</div>
+    <div class="vx">${perDay.map(([d]) => `<span>${dayShort(d)}</span>`).join("")}</div>
     <div class="lgd"><span><i style="background:${C.acc}"></i>Accepted</span><span><i style="background:${C.rej}"></i>Rejected</span></div>`
     : '<p class="note">No surveys in this period.</p>';
 
@@ -590,16 +594,16 @@ function renderReport() {
   };
   const ratioOk = GROUPS.every(([k]) => g[k] >= tgt) && fem >= femTgt;
 
-  const rejRows = rej.map(s => `<tr><td>${s.date}</td><td class="num">${s.src}</td><td>Ward ${s.ward ?? "?"}</td><td>${ruleText(s.reasons)}</td></tr>`).join("");
+  const rejRows = rej.map(s => `<tr><td style="white-space:nowrap">${dayLong(s.date)}</td><td class="num">${s.src}</td><td>Ward ${s.ward ?? "?"}</td><td>${ruleText(s.reasons)}</td></tr>`).join("");
   const outRows = outw.map(s => { const w = wardTeam[s.ward] || {};
-    return `<tr><td>${s.date}</td><td class="num">${s.src}</td><td>Ward ${s.ward} · Team ${w.team} (${w.team_name})</td>
+    return `<tr><td style="white-space:nowrap">${dayLong(s.date)}</td><td class="num">${s.src}</td><td>Ward ${s.ward} · Team ${w.team} (${w.team_name})</td>
       <td>${s.accepted ? "Accepted" : '<span style="color:var(--bad)">Rejected</span>'}</td></tr>`; }).join("");
 
   document.getElementById("reportDoc").innerHTML = `
     <div class="kicker">DNCC Civic Survey · Surveyor report</div>
     <h1>${esc(s0.name)}</h1>
     <div class="meta">Team ${s0.team} (${teamP.team_name || ""}) · Assigned wards: ${s0.assigned.join(", ")}<br>
-      Period: <b>${from || "start"} to ${to || "today"}</b> (Bangladesh date of submission) ·
+      Period: <b>${from ? dayLong(from) : "start"} to ${to ? dayLong(to) : "today"}</b> (Bangladesh date of submission) ·
       “Sometimes votes” counted as: <b>${state.sometimes === "voted" ? "voted" : "didn't vote"}</b><br>
       Data as of ${DATA.meta.updated_label} · Report made ${new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</div>
     <div class="kpis avoid">
@@ -616,7 +620,7 @@ function renderReport() {
       ${ratioRow("Female (of all accepted)", fem, femTgt, acc.length)}
       </tbody></table>
       <p class="ownote">Target for each group = 25% of the surveyor's ${inGroups} accepted surveys that fall in a group; female target = 30% of all ${acc.length} accepted.
-        ${notIn} accepted survey(s) are not in any group (not a registered voter, or no answer to Q8).</p></div>
+        ${notIn} accepted survey(s) are not in any group (no answer to Q8, or age missing).</p></div>
     <h3>Rejected surveys (${rej.length})</h3>
     ${rej.length ? `<table><thead><tr><th>Date</th><th class="num">Kobo row</th><th>Ward</th><th>Reason(s)</th></tr></thead><tbody>${rejRows}</tbody></table>`
                  : '<p class="note">None in this period.</p>'}
