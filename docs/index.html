@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DNCC Civic Survey — Ward Dashboard</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
@@ -83,6 +84,76 @@
   .legend { background: rgba(255,255,255,.95); padding: 8px 10px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.15); font-size: 12px; line-height: 1.6; }
   .legend .t { font-weight: 600; margin-bottom: 2px; }
   .sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.25); }
+  /* ---------- status colours (reserved: always shown with an icon + word) */
+  :root { --good: #2e7d32; --good-bg: #e6f2e7; --warn: #a15c00; --warn-bg: #fdf0dc; --bad: #c62828; --bad-bg: #fbe3e3; --nogo: #8a939d; }
+  .st { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .st.good { background: var(--good-bg); color: var(--good); } .st.warn { background: var(--warn-bg); color: var(--warn); }
+  .st.bad { background: var(--bad-bg); color: var(--bad); } .st.grey { background: #eef1f4; color: var(--ink-2); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 12px 0; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .tile b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .tile span { font-size: 12px; color: var(--muted); }
+  .tile.bad b { color: var(--bad); } .tile.good b { color: var(--good); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-top: 12px; }
+  .card h3 { margin: 0 0 8px; font-size: 13.5px; }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 10px; }
+  .toolbar .seg { width: 230px; }
+  /* bullet bars: track = 0 .. 2 x target, tick at the target */
+  .bul { min-width: 112px; }
+  .bul .trk { position: relative; height: 9px; background: #eceff2; border-radius: 5px; overflow: hidden; }
+  .bul .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 5px; }
+  .bul .tick { position: absolute; top: -2px; bottom: -2px; left: 50%; width: 2px; background: #1d232b; }
+  .bul .bt { font-size: 12px; margin-top: 3px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .bul .bt span { color: var(--muted); }
+  .bul .bt .need { font-weight: 600; }
+  .qtbl td { vertical-align: middle; }
+  .qtbl tr.bad td:first-child { box-shadow: inset 4px 0 0 var(--bad); }
+  /* horizontal bar chart (needed samples, report charts) */
+  .hbar { display: grid; grid-template-columns: 170px 1fr 70px; align-items: center; gap: 8px; margin: 5px 0; font-size: 12.5px; }
+  .hbar .b { height: 14px; background: #eceff2; border-radius: 4px; position: relative; }
+  .hbar .b i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
+  .hbar .b em { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #1d232b; }
+  .hbar .v { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
+  .ownote { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  /* ---------- surveyor report (screen overlay + print + PDF) */
+  #reportView { position: fixed; inset: 0; z-index: 5000; background: rgba(29,35,43,.55); overflow: auto; padding: 20px 10px 40px; }
+  #reportView[hidden] { display: none; }
+  .rtools { width: 794px; max-width: 100%; margin: 0 auto 10px; background: var(--panel); border-radius: 10px; padding: 10px 14px;
+            display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .rtools input[type=date] { padding: 4px 6px; border: 1px solid #cfd5db; border-radius: 6px; font: inherit; }
+  .rtools .grow { flex: 1; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  .report { width: 794px; max-width: 100%; margin: 0 auto; background: #fff; padding: 34px 38px; border-radius: 4px; color: #1d232b; font-size: 12.5px; }
+  .report h1 { font-size: 22px; margin: 2px 0 4px; }
+  .report .kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .report .meta { color: var(--ink-2); font-size: 12px; line-height: 1.6; }
+  .report h3 { font-size: 13.5px; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  .report .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+  .report .kpis div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .report .kpis b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+  .report .kpis span { font-size: 11px; color: var(--muted); }
+  .report table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .report th { text-align: left; background: #f2f4f6; padding: 5px 7px; font-size: 11px; color: var(--ink-2); }
+  .report td { padding: 4px 7px; border-bottom: 1px solid #eef0f2; vertical-align: top; }
+  .report td.num, .report th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .report tr { page-break-inside: avoid; }
+  .vchart { display: flex; align-items: flex-end; gap: 6px; height: 150px; padding: 0 2px; border-bottom: 1px solid #c9ced4; }
+  .vchart .col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; max-width: 46px; margin: 0 auto; }
+  .vchart .col i { display: block; }
+  .vchart .col .lbl { font-size: 10.5px; text-align: center; font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+  .vx { display: flex; gap: 6px; padding: 3px 2px 0; }
+  .vx span { flex: 1; max-width: 46px; margin: 0 auto; font-size: 10px; color: var(--muted); text-align: center; }
+  .lgd { display: flex; gap: 14px; font-size: 11.5px; color: var(--ink-2); margin-top: 6px; }
+  .lgd i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .avoid { page-break-inside: avoid; break-inside: avoid; }
+  @media print {
+    @page { size: A4; margin: 10mm; }
+    body { background: #fff; height: auto; }
+    body > *:not(#reportView) { display: none !important; }
+    #reportView { position: static; background: none; padding: 0; overflow: visible; }
+    .rtools { display: none !important; }
+    .report { width: auto; padding: 0; }
+  }
   @media (max-width: 820px) { .brand span { display: none; } .topbar .updated { display: none; }
     .app { grid-template-columns: 1fr; grid-template-rows: 55vh auto; height: auto; } #map { height: 55vh; order: -1; } aside { border-right: 0; } }
 </style>
@@ -100,19 +171,56 @@
 <header class="topbar">
   <div class="brand"><b>DNCC Civic Survey</b><span>Dhaka North City Corporation</span></div>
   <nav class="tabs" id="tabs">
-    <button data-tab="map" class="on">Ward map</button><button data-tab="surveyors">Surveyors</button>
+    <button data-tab="map" class="on">Ward map</button><button data-tab="quotas">Ward quotas</button><button data-tab="surveyors">Surveyors</button><button data-tab="files">Excel files</button>
   </nav>
   <span class="updated" id="updated">Loading…</span>
 </header>
+
+<section class="survview" id="quotaView" hidden>
+  <h2 style="margin:0">Ward quotas</h2>
+  <p class="note" style="margin:4px 0 0">Each ward: up to <b>60</b> accepted interviews — <b>15</b> in each of the four groups below,
+    and at least <b>30% female (18 of 60)</b>. Groups count registered voters only; people who are not registered or did not answer Q8
+    still count toward the 60 and the female share.</p>
+  <div class="toolbar">
+    <span class="note" style="margin:0">Count “sometimes” (মাঝে মাঝে যাই) as</span>
+    <div class="seg" id="qSometimes"><button data-v="voted" class="on">Voted</button><button data-v="not">Didn't vote</button></div>
+    <label class="check" style="margin:0"><input type="checkbox" id="qAll"> Show wards with no interviews yet</label>
+  </div>
+  <div class="tiles" id="qTiles"></div>
+  <div class="card"><h3 id="qNeedTitle">Samples still needed</h3><div id="qNeed"></div></div>
+  <div class="tablewrap"><table class="stbl qtbl" id="qTable"></table></div>
+</section>
 
 <section class="survview" id="survView" hidden>
   <div class="survhead">
     <h2 style="margin:0">Surveyors</h2>
     <p class="note" style="margin:4px 0 0">Female % is of accepted interviews in each ward; <span class="chip low">red</span> = below 30%.
-      Wards covered: <span class="chip out">dashed</span> = outside the team's assigned wards.</p>
+      Wards covered: <span class="chip out">dashed</span> = outside the team's assigned wards.
+      <b>Report</b> opens a printable report for any date range, which can be downloaded as PDF.</p>
   </div>
   <div class="tablewrap"><table class="stbl" id="survTable"></table></div>
 </section>
+
+<section class="survview" id="filesView" hidden>
+  <h2 style="margin:0">Excel files</h2>
+  <p class="note" style="margin:4px 0 0">The hand-checked Excel of each day (the newest run of that day), exactly as reviewed —
+    with the Reject ticks, all answers and household GPS. Downloads are decrypted in your browser.
+    <b>Contains respondents' personal data: do not forward.</b></p>
+  <div class="tablewrap"><table class="stbl" id="filesTable"></table></div>
+</section>
+
+<div id="reportView" hidden>
+  <div class="rtools">
+    <b>Surveyor report</b>
+    <label>From <input type="date" id="rFrom"></label>
+    <label>To <input type="date" id="rTo"></label>
+    <span class="grow"></span>
+    <button class="btn primary" id="rPdf">Download PDF</button>
+    <button class="btn" id="rPrint">Print</button>
+    <button class="btn" id="rClose">Close</button>
+  </div>
+  <div class="report" id="reportDoc"></div>
+</div>
 
 <div class="app" id="mapView">
   <aside>
@@ -334,22 +442,264 @@ function renderSurveyors() {
       <td class="num rej">${s.rejected}${pct(s.rejected)}</td>
       <td class="num"><span class="chip${n && fp < LOW ? " low" : ""}">${n ? fp + "%" : "–"}</span></td>
       <td><div class="chips">${fem || '<span class="note">–</span>'}</div></td>
+      <td><button class="btn primary" data-report="${esc(s.user)}">Report</button></td>
     </tr>`;
   }).join("");
   document.getElementById("survTable").innerHTML = `<thead><tr>
       <th>Surveyor</th><th>Team</th><th>Wards assigned</th><th>Wards covered (interviews)</th>
       <th class="num">Submitted</th><th class="num">Accepted</th><th class="num">Rejected</th>
-      <th class="num">Female % (all)</th><th>Female % by ward</th></tr></thead><tbody>${rows}</tbody>`;
+      <th class="num">Female % (all)</th><th>Female % by ward</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+// ====================================================================== quotas (shared rules)
+const QUOTA = { total: 60, perGroup: 15, femaleShare: 0.30 };
+const FEMALE_TARGET = Math.ceil(QUOTA.total * QUOTA.femaleShare);          // 18 of 60
+const GROUPS = [["o_v", "25+ · voted"], ["o_n", "25+ · didn't vote"], ["y_v", "18–24 · voted"], ["y_n", "18–24 · didn't vote"]];
+const OLD = new Set(["25-34", "35-44", "45-54", "55-64", "65+"]);
+// group of one submission; null = not in a group (not a registered voter, no Q8 answer, or age missing)
+function group(s) {
+  if (!isRegistered(s.voter)) return null;
+  const young = s.age === "18-24", old = OLD.has(s.age);
+  if (!young && !old) return null;
+  if (isVoted(s.vote)) return young ? "y_v" : "o_v";
+  if (isNotVoted(s.vote)) return young ? "y_n" : "o_n";
+  return null;
+}
+const C = { good: "var(--good)", warn: "#d98c00", bad: "var(--bad)", none: "#b8c0c8", acc: "#3b6fb6", rej: "#c62828" };
+
+function bullet(n, target, alarm, unit = "") {
+  const met = n >= target, col = met ? C.good : (alarm ? C.bad : C.warn);
+  const w = Math.min(100, 100 * n / (2 * target));
+  const txt = met ? (n > target ? `<span>+${n - target} over</span>` : `<span>✓ met</span>`)
+                  : `<span class="need" style="color:${alarm ? "var(--bad)" : "var(--warn)"}">${alarm ? "✕" : "!"} need ${target - n}</span>`;
+  return `<div class="bul"><div class="trk"><div class="fill" style="width:${w}%;background:${col}"></div><div class="tick"></div></div>
+          <div class="bt">${n}/${target}${unit} · ${txt}</div></div>`;
+}
+
+function wardQuota(subs) {
+  const q = { total: 0, female: 0, out: 0, g: { o_v: 0, o_n: 0, y_v: 0, y_n: 0 } };
+  for (const s of subs) {
+    q.total++;
+    if (s.gender === "Female") q.female++;
+    const g = group(s);
+    if (g) q.g[g]++; else q.out++;
+  }
+  q.needs = Object.fromEntries(GROUPS.map(([k]) => [k, Math.max(0, QUOTA.perGroup - q.g[k])]));
+  q.needFemale = Math.max(0, FEMALE_TARGET - q.female);
+  q.gaps = Object.values(q.needs).some(v => v > 0) || q.needFemale > 0;
+  q.full = q.total >= QUOTA.total;
+  q.state = q.total === 0 ? "none" : !q.gaps ? "good" : q.full ? "bad" : "warn";
+  return q;
+}
+
+function renderQuotas() {
+  const showAll = document.getElementById("qAll").checked;
+  const acc = SUBS.filter(s => s.accepted && s.ward);
+  const byWard = {};
+  for (const s of acc) (byWard[s.ward] ||= []).push(s);
+  const rows = GEO.features.map(f => ({ p: f.properties, q: wardQuota(byWard[f.properties.ward] || []) }))
+    .filter(r => showAll || r.q.total > 0);
+  const order = { bad: 0, warn: 1, good: 2, none: 3 };
+  rows.sort((a, b) => order[a.q.state] - order[b.q.state] || b.q.total - a.q.total || a.p.ward - b.p.ward);
+
+  const nBad = rows.filter(r => r.q.state === "bad").length, nGood = rows.filter(r => r.q.state === "good").length;
+  const nWarn = rows.filter(r => r.q.state === "warn").length;
+  const needSum = Object.fromEntries(GROUPS.map(([k]) => [k, rows.reduce((s, r) => s + r.q.needs[k], 0)]));
+  const needFem = rows.reduce((s, r) => s + r.q.needFemale, 0);
+  const overSum = rows.reduce((s, r) => s + Math.max(0, r.q.total - QUOTA.total), 0);
+  document.getElementById("qTiles").innerHTML = `
+    <div class="tile bad"><b>${nBad}</b><span>✕ wards at 60+ but still missing groups</span></div>
+    <div class="tile"><b>${nWarn}</b><span>! wards in progress, groups still missing</span></div>
+    <div class="tile good"><b>${nGood}</b><span>✓ wards with all quotas met</span></div>
+    <div class="tile"><b>${Object.values(needSum).reduce((a, b) => a + b, 0)}</b><span>group samples still needed (${rows.length} wards shown)</span></div>
+    <div class="tile"><b>${overSum}</b><span>interviews above the 60 cap (all groups)</span></div>`;
+
+  const maxNeed = Math.max(1, ...Object.values(needSum), needFem);
+  document.getElementById("qNeedTitle").textContent = `Samples still needed — total over the ${rows.length} wards shown`;
+  document.getElementById("qNeed").innerHTML =
+    GROUPS.map(([k, label]) => `<div class="hbar"><span>${label}</span><div class="b"><i style="width:${100 * needSum[k] / maxNeed}%;background:${needSum[k] ? C.bad : C.good}"></i></div><span class="v">${needSum[k]}</span></div>`).join("") +
+    `<div class="hbar"><span>Female (to reach 18 per ward)</span><div class="b"><i style="width:${100 * needFem / maxNeed}%;background:${needFem ? C.bad : C.good}"></i></div><span class="v">${needFem}</span></div>`;
+
+  const stChip = { bad: '<span class="st bad">✕ 60+, still missing</span>', warn: '<span class="st warn">! In progress</span>',
+                   good: '<span class="st good">✓ Complete</span>', none: '<span class="st grey">Not started</span>' };
+  const body = rows.map(({ p, q }) => {
+    const alarm = q.full;
+    const focus = [...GROUPS.filter(([k]) => q.needs[k] > 0).map(([k, l]) => `<span class="chip ${alarm ? "low" : ""}">${l}: ${q.needs[k]}</span>`),
+                   q.needFemale ? `<span class="chip ${alarm ? "low" : ""}">Female: ${q.needFemale}</span>` : ""].join("");
+    const over = GROUPS.filter(([k]) => q.g[k] > QUOTA.perGroup).map(([k, l]) => `${l} +${q.g[k] - QUOTA.perGroup}`).join(", ");
+    const fp = q.total ? Math.round(100 * q.female / q.total) : 0;
+    return `<tr class="${q.state === "bad" ? "bad" : ""}">
+      <td style="white-space:nowrap"><b>Ward ${p.ward}</b><br><span class="note"><span class="sw" style="background:${p.colour}"></span>Team ${p.team} · ${p.team_name}</span></td>
+      <td>${stChip[q.state]}</td>
+      <td>${bullet(q.total, QUOTA.total, false)}${q.out ? `<div class="ownote">${q.out} not in a group</div>` : ""}</td>
+      ${GROUPS.map(([k]) => `<td>${bullet(q.g[k], QUOTA.perGroup, alarm)}</td>`).join("")}
+      <td>${bullet(q.female, FEMALE_TARGET, alarm)}<div class="ownote" style="${q.total && fp < 30 ? "color:var(--bad);font-weight:600" : ""}">${fp}% female</div></td>
+      <td><div class="chips">${focus || '<span class="st good">✓ nothing</span>'}</div>${over ? `<div class="ownote">Over-collected: ${over}</div>` : ""}</td>
+    </tr>`;
+  }).join("");
+  document.getElementById("qTable").innerHTML = `<thead><tr><th>Ward</th><th>Status</th><th>Total (of 60)</th>
+    ${GROUPS.map(([, l]) => `<th>${l} (15)</th>`).join("")}<th>Female (18 = 30%)</th><th>Still needed — focus here</th></tr></thead><tbody>${body}</tbody>`;
+}
+
+// ====================================================================== Excel files
+function fmtSize(b) { return b > 1e6 ? (b / 1e6).toFixed(1) + " MB" : Math.round(b / 1e3) + " KB"; }
+function renderFiles() {
+  const files = DATA.files || [];
+  document.getElementById("filesTable").innerHTML = `<thead><tr><th>Date</th><th>File</th><th>Last saved</th>
+    <th class="num">Submissions</th><th class="num">Accepted</th><th class="num">Rejected</th><th class="num">Size</th><th></th></tr></thead><tbody>` +
+    files.map((f, i) => `<tr><td><b>${f.date}</b>${i === 0 ? ' <span class="st good">latest</span>' : ""}</td><td>${esc(f.name)}</td><td>${f.saved}</td>
+      <td class="num">${f.submissions}</td><td class="num">${f.accepted}</td><td class="num rej">${f.rejected}</td><td class="num">${fmtSize(f.size)}</td>
+      <td><button class="btn primary" data-file="${i}">Download</button></td></tr>`).join("") + "</tbody>";
+}
+async function downloadFile(i, btn) {
+  const f = DATA.files[i], old = btn.textContent;
+  btn.disabled = true; btn.textContent = "Decrypting…";
+  try {
+    const buf = new Uint8Array(await fetch(f.path, { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }));
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(0, 12) }, KEY, buf.slice(12));
+    const url = URL.createObjectURL(new Blob([plain], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: f.name });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    btn.textContent = old;
+  } catch (e) { btn.textContent = "Failed - retry"; console.error(e); }
+  btn.disabled = false;
+}
+
+// ====================================================================== surveyor report
+let REPORT_USER = null;
+function openReport(user) {
+  REPORT_USER = user;
+  const dates = SUBS.map(s => s.date).filter(Boolean).sort();
+  for (const id of ["rFrom", "rTo"]) { const el = document.getElementById(id); el.min = dates[0]; el.max = dates[dates.length - 1]; }
+  document.getElementById("rFrom").value = dates[0];
+  document.getElementById("rTo").value = dates[dates.length - 1];
+  document.getElementById("reportView").hidden = false;
+  renderReport();
+}
+function ruleText(codes) {
+  return codes.split(",").map(c => c.trim()).filter(Boolean).map(c => `<b>${c}</b>: ${esc(DATA.rules[c] || c)}`).join("<br>");
+}
+function renderReport() {
+  const s0 = DATA.surveyors.find(s => s.user === REPORT_USER);
+  if (!s0) return;
+  const from = document.getElementById("rFrom").value, to = document.getElementById("rTo").value;
+  const mine = SUBS.filter(s => s.user === REPORT_USER && (!from || s.date >= from) && (!to || s.date <= to));
+  const acc = mine.filter(s => s.accepted), rej = mine.filter(s => !s.accepted), outw = mine.filter(s => s.out_of_ward);
+  const teamP = GEO.features.find(f => f.properties.team === s0.team)?.properties || {};
+  const wardTeam = Object.fromEntries(GEO.features.map(f => [f.properties.ward, f.properties]));
+  const pc = (v, n) => n ? Math.round(100 * v / n) + "%" : "–";
+
+  // per-day columns
+  const days = [...new Set(mine.map(s => s.date))].sort();
+  const perDay = days.map(d => [d, mine.filter(s => s.date === d && s.accepted).length, mine.filter(s => s.date === d && !s.accepted).length]);
+  const maxDay = Math.max(1, ...perDay.map(([, a, r]) => a + r));
+  const dayChart = days.length ? `
+    <div class="vchart">${perDay.map(([d, a, r]) => `<div class="col"><div class="lbl">${a + r}</div>
+        <i style="height:${120 * r / maxDay}px;background:${C.rej}"></i><i style="height:${120 * a / maxDay}px;background:${C.acc}"></i></div>`).join("")}</div>
+    <div class="vx">${perDay.map(([d]) => `<span>${d.slice(5)}</span>`).join("")}</div>
+    <div class="lgd"><span><i style="background:${C.acc}"></i>Accepted</span><span><i style="background:${C.rej}"></i>Rejected</span></div>`
+    : '<p class="note">No surveys in this period.</p>';
+
+  // group mix vs balanced target (25% of the surveyor's accepted surveys that are in a group)
+  const g = { o_v: 0, o_n: 0, y_v: 0, y_n: 0 }; let notIn = 0, fem = 0;
+  for (const s of acc) { const k = group(s); if (k) g[k]++; else notIn++; if (s.gender === "Female") fem++; }
+  const inGroups = acc.length - notIn;
+  const tgt = Math.round(inGroups * 0.25), femTgt = Math.ceil(acc.length * QUOTA.femaleShare);
+  const mixMax = Math.max(1, tgt * 2, ...Object.values(g), fem, femTgt);
+  const mixBar = (label, n, t) => {
+    const met = n >= t;
+    return `<div class="hbar"><span>${label}</span><div class="b"><i style="width:${100 * n / mixMax}%;background:${met ? C.good : C.warn}"></i>
+      <em style="left:${100 * t / mixMax}%"></em></div><span class="v">${n} / ${t}</span></div>`;
+  };
+  const mixChart = acc.length ? GROUPS.map(([k, l]) => mixBar(l, g[k], tgt)).join("") + mixBar("Female", fem, femTgt) +
+    `<div class="lgd"><span><i style="background:${C.good}"></i>Target met</span><span><i style="background:${C.warn}"></i>Below target</span><span><i style="background:#1d232b;width:2px"></i>Target</span></div>`
+    : '<p class="note">No accepted surveys in this period.</p>';
+  const ratioRow = (label, n, t, base) => {
+    const miss = Math.max(0, t - n);
+    return `<tr><td>${label}</td><td class="num">${n}</td><td class="num">${pc(n, base)}</td><td class="num">${t}</td>
+      <td class="num" style="${miss ? "color:var(--bad);font-weight:600" : ""}">${miss}</td>
+      <td>${miss ? '<span class="st bad">✕ Not met</span>' : '<span class="st good">✓ Met</span>'}</td></tr>`;
+  };
+  const ratioOk = GROUPS.every(([k]) => g[k] >= tgt) && fem >= femTgt;
+
+  const rejRows = rej.map(s => `<tr><td>${s.date}</td><td class="num">${s.src}</td><td>Ward ${s.ward ?? "?"}</td><td>${ruleText(s.reasons)}</td></tr>`).join("");
+  const outRows = outw.map(s => { const w = wardTeam[s.ward] || {};
+    return `<tr><td>${s.date}</td><td class="num">${s.src}</td><td>Ward ${s.ward} · Team ${w.team} (${w.team_name})</td>
+      <td>${s.accepted ? "Accepted" : '<span style="color:var(--bad)">Rejected</span>'}</td></tr>`; }).join("");
+
+  document.getElementById("reportDoc").innerHTML = `
+    <div class="kicker">DNCC Civic Survey · Surveyor report</div>
+    <h1>${esc(s0.name)}</h1>
+    <div class="meta">Team ${s0.team} (${teamP.team_name || ""}) · Assigned wards: ${s0.assigned.join(", ")}<br>
+      Period: <b>${from || "start"} to ${to || "today"}</b> (Bangladesh date of submission) ·
+      “Sometimes votes” counted as: <b>${state.sometimes === "voted" ? "voted" : "didn't vote"}</b><br>
+      Data as of ${DATA.meta.updated_label} · Report made ${new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</div>
+    <div class="kpis avoid">
+      <div><b>${mine.length}</b><span>surveys submitted</span></div>
+      <div><b>${acc.length}</b><span>accepted (${pc(acc.length, mine.length)})</span></div>
+      <div><b style="color:var(--bad)">${rej.length}</b><span>rejected (${pc(rej.length, mine.length)})</span></div>
+      <div><b>${outw.length}</b><span>outside the team's wards</span></div>
+    </div>
+    <div class="avoid"><h3>Surveys per day</h3>${dayChart}</div>
+    <div class="avoid"><h3>Group mix of accepted surveys — target vs actual</h3>${mixChart}</div>
+    <div class="avoid"><h3>Required ratio kept? ${acc.length ? (ratioOk ? '<span class="st good">✓ Yes</span>' : '<span class="st bad">✕ No</span>') : ""}</h3>
+      <table><thead><tr><th>Group</th><th class="num">Has</th><th class="num">Share</th><th class="num">Target</th><th class="num">Missing</th><th></th></tr></thead><tbody>
+      ${GROUPS.map(([k, l]) => ratioRow(l, g[k], tgt, inGroups)).join("")}
+      ${ratioRow("Female (of all accepted)", fem, femTgt, acc.length)}
+      </tbody></table>
+      <p class="ownote">Target for each group = 25% of the surveyor's ${inGroups} accepted surveys that fall in a group; female target = 30% of all ${acc.length} accepted.
+        ${notIn} accepted survey(s) are not in any group (not a registered voter, or no answer to Q8).</p></div>
+    <h3>Rejected surveys (${rej.length})</h3>
+    ${rej.length ? `<table><thead><tr><th>Date</th><th class="num">Kobo row</th><th>Ward</th><th>Reason(s)</th></tr></thead><tbody>${rejRows}</tbody></table>`
+                 : '<p class="note">None in this period.</p>'}
+    <h3>Surveys outside the team's assigned wards (${outw.length})</h3>
+    ${outw.length ? `<table><thead><tr><th>Date</th><th class="num">Kobo row</th><th>Ward counted in</th><th>Decision</th></tr></thead><tbody>${outRows}</tbody></table>`
+                  : '<p class="note">None in this period.</p>'}`;
+}
+
+let html2pdfLoaded = null;
+function loadHtml2pdf() {
+  return html2pdfLoaded ||= new Promise((ok, fail) => {
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+    s.integrity = "sha384-Yv5O+t3uE3hunW8uyrbpPW3iw6/5/Y7HitWJBLgqfMoA36NogMmy+8wWZMpn3HWc";
+    s.crossOrigin = "anonymous"; s.referrerPolicy = "no-referrer";
+    s.onload = ok; s.onerror = () => { html2pdfLoaded = null; fail(new Error("PDF library could not load")); };
+    document.head.append(s);
+  });
+}
+async function downloadPdf(btn) {
+  const s0 = DATA.surveyors.find(s => s.user === REPORT_USER);
+  const name = `Surveyor_report_${(s0?.name || REPORT_USER).replace(/[^\w]+/g, "_")}_${document.getElementById("rFrom").value}_to_${document.getElementById("rTo").value}.pdf`;
+  const old = btn.textContent; btn.disabled = true; btn.textContent = "Making PDF…";
+  try {
+    await loadHtml2pdf();
+    await html2pdf().set({ margin: [8, 8, 10, 8], filename: name, image: { type: "jpeg", quality: 0.96 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      pagebreak: { mode: ["css", "legacy"], avoid: [".avoid", "tr"] } }).from(document.getElementById("reportDoc")).save();
+  } catch (e) { alert("Could not make the PDF here (" + e.message + "). Use Print and choose 'Save as PDF' instead."); }
+  btn.disabled = false; btn.textContent = old;
 }
 
 function seg(id, key) {
   const el = document.getElementById(id);
   el.addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
+    if (key === "sometimes") return setSometimes(b.dataset.v);
     el.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
     state[key] = b.dataset.v; render();
   });
 }
+// one "sometimes votes" switch, shown on the map tab and the quota tab; reports follow it too
+function setSometimes(v) {
+  state.sometimes = v;
+  for (const id of ["fSometimes", "qSometimes"])
+    document.querySelectorAll(`#${id} button`).forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  render(); renderQuotas();
+  if (!document.getElementById("reportView").hidden) renderReport();
+}
+let SUBS = [];
 
 // ---------- password lock: the data file is AES-256-GCM encrypted; the key comes from the password
 const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
@@ -358,8 +708,10 @@ async function decrypt(enc, password) {
   const key = await crypto.subtle.deriveKey({ name: "PBKDF2", hash: "SHA-256", salt: b64(enc.salt), iterations: enc.iter },
     base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
   const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(enc.iv) }, key, b64(enc.ct));
+  KEY = key;   // kept in memory only (never stored), for the Excel downloads
   return JSON.parse(new TextDecoder().decode(plain));
 }
+let KEY = null;
 // The password is never stored (no cookie / storage): every page load or refresh asks again.
 async function unlock(password) {
   const enc = await fetch("data/data.enc.json", { cache: "no-store" }).then(r => r.json());
@@ -383,6 +735,7 @@ async function init(geo, data) {
   GEO = geo;
   DATA = data;
   DATA.rows = data.rows.map(r => Object.fromEntries(data.fields.map((f, i) => [f, r[i]])));
+  SUBS = (data.subs || []).map(r => Object.fromEntries(data.subs_fields.map((f, i) => [f, r[i]])));
   document.getElementById("updated").textContent = "Last updated: " + data.meta.updated_label;
 
   map = L.map("map", { zoomSnap: .25 });
@@ -419,24 +772,35 @@ async function init(geo, data) {
   document.getElementById("fVote").onchange = e => { state.vote = e.target.value; render(); };
   document.getElementById("clearSel").onclick = () => { selected.clear(); render(); };
 
-  // ---- tabs: Ward map / Surveyors
-  renderSurveyors();
+  // ---- tabs: Ward map / Ward quotas / Surveyors / Excel files
+  renderSurveyors(); renderQuotas(); renderFiles();
+  seg("qSometimes", "sometimes");
+  document.getElementById("qAll").onchange = renderQuotas;
+  const VIEWS = { map: "mapView", quotas: "quotaView", surveyors: "survView", files: "filesView" };
   document.getElementById("tabs").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b));
-    const surv = b.dataset.tab === "surveyors";
-    document.getElementById("survView").hidden = !surv;
-    document.getElementById("mapView").hidden = surv;
-    if (!surv) map.invalidateSize();
+    for (const [tab, id] of Object.entries(VIEWS)) document.getElementById(id).hidden = tab !== b.dataset.tab;
+    if (b.dataset.tab === "map") map.invalidateSize();
   });
+  document.getElementById("survTable").addEventListener("click", e => {
+    const b = e.target.closest("[data-report]"); if (b) openReport(b.dataset.report);
+  });
+  document.getElementById("filesTable").addEventListener("click", e => {
+    const b = e.target.closest("[data-file]"); if (b) downloadFile(+b.dataset.file, b);
+  });
+  for (const id of ["rFrom", "rTo"]) document.getElementById(id).onchange = renderReport;
+  document.getElementById("rClose").onclick = () => { document.getElementById("reportView").hidden = true; };
+  document.getElementById("rPrint").onclick = () => window.print();
+  document.getElementById("rPdf").onclick = e => downloadPdf(e.currentTarget);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") document.getElementById("reportView").hidden = true; });
   document.getElementById("reset").onclick = () => {
     Object.assign(state, { ward: "all", gender: "all", age: "all", student: false, voter: "all", vote: "all", sometimes: "voted" });
     ["fWard", "fAge", "fVoter", "fVote"].forEach(id => document.getElementById(id).value = "all");
     map.fitBounds(group.getBounds(), { padding: [10, 10] });
     document.getElementById("fStudent").checked = false;
-    for (const [id, v] of [["fGender", "all"], ["fSometimes", "voted"]])
-      document.querySelectorAll(`#${id} button`).forEach(b => b.classList.toggle("on", b.dataset.v === v));
-    render();
+    document.querySelectorAll("#fGender button").forEach(b => b.classList.toggle("on", b.dataset.v === "all"));
+    setSometimes("voted");
   };
   render();
 }
