@@ -128,6 +128,8 @@
   .report .kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
   .report .meta { color: var(--ink-2); font-size: 12px; line-height: 1.6; }
   .report h3 { font-size: 13.5px; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  .report .rsec { font-size: 15px; font-weight: 700; margin: 22px 0 6px; padding: 6px 10px; background: #eef4fb; color: var(--accent);
+                  border-radius: 6px; page-break-after: avoid; break-after: avoid; }
   .report .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
   .report .kpis div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
   .report .kpis b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
@@ -594,6 +596,36 @@ function renderReport() {
   };
   const ratioOk = GROUPS.every(([k]) => g[k] >= tgt) && fem >= femTgt;
 
+  // ---- by ward: every assigned ward (even with no surveys), then wards covered outside the assignment
+  const SHORT = { o_v: "25+ V", o_n: "25+ N", y_v: "18–24 V", y_n: "18–24 N" };
+  const assignedSet = new Set(s0.assigned);
+  const outsideWards = [...new Set(mine.map(s => s.ward).filter(w => w != null && !assignedSet.has(w)))].sort((a, b) => a - b);
+  const wardRow = w => {
+    const ws = mine.filter(s => s.ward === w), wa = ws.filter(s => s.accepted);
+    const p = wardTeam[w] || {};
+    const label = `<b style="white-space:nowrap">Ward ${w}</b><br><span class="ownote" style="margin:0;white-space:nowrap">Team ${p.team} · ${p.team_name || ""}</span>`;
+    // what the ward as a whole (all teams, all dates) still needs
+    const wq = wardQuota(SUBS.filter(s => s.accepted && s.ward === w));
+    const needs = [...GROUPS.filter(([k]) => wq.needs[k] > 0).map(([k]) => `${SHORT[k]} ${wq.needs[k]}`),
+                   wq.needFemale ? `F ${wq.needFemale}` : ""].filter(Boolean).join(" · ");
+    const wardNeeds = `<span style="font-size:11px">${needs || "✓ all met"}</span>${wq.full && needs ? '<br><span class="st bad" style="font-size:10.5px">✕ 60+, still missing</span>' : ""}`;
+    if (!ws.length) return `<tr><td>${label}</td><td colspan="9" class="note">No surveys in this period</td><td>${wardNeeds}</td></tr>`;
+    const gg = { o_v: 0, o_n: 0, y_v: 0, y_n: 0 }; let f = 0;
+    for (const s of wa) { const k = group(s); if (k) gg[k]++; if (s.gender === "Female") f++; }
+    const inG = Object.values(gg).reduce((a, b) => a + b, 0);
+    const t = Math.round(inG * 0.25), ft = Math.ceil(wa.length * QUOTA.femaleShare);
+    const ok = wa.length > 0 && GROUPS.every(([k]) => gg[k] >= t) && f >= ft;
+    const cell = (n, tt) => `<td class="num" style="${n < tt ? "color:var(--bad);font-weight:600" : ""}">${n}<span style="color:var(--muted);font-weight:400">/${tt}</span></td>`;
+    return `<tr><td>${label}</td><td class="num">${ws.length}</td><td class="num">${wa.length}</td>
+      <td class="num" style="${ws.length - wa.length ? "color:var(--bad)" : ""}">${ws.length - wa.length}</td>
+      ${cell(f, ft)}${GROUPS.map(([k]) => cell(gg[k], t)).join("")}
+      <td>${wa.length ? (ok ? '<span class="st good">✓</span>' : '<span class="st bad">✕</span>') : "–"}</td><td>${wardNeeds}</td></tr>`;
+  };
+  const wardTable = (title, wardsList, empty) => `<div class="avoid"><h3>${title}</h3>${wardsList.length ? `<table>
+    <thead><tr><th>Ward</th><th class="num">Subm.</th><th class="num">Acc.</th><th class="num">Rej.</th><th class="num">Female</th>
+      ${GROUPS.map(([k]) => `<th class="num">${SHORT[k]}</th>`).join("")}<th>Ratio</th><th>Ward still needs (all teams)</th></tr></thead>
+    <tbody>${wardsList.map(wardRow).join("")}</tbody></table>` : `<p class="note">${empty}</p>`}</div>`;
+
   const rejRows = rej.map(s => `<tr><td style="white-space:nowrap">${dayLong(s.date)}</td><td class="num">${s.src}</td><td>Ward ${s.ward ?? "?"}</td><td>${ruleText(s.reasons)}</td></tr>`).join("");
   const outRows = outw.map(s => { const w = wardTeam[s.ward] || {};
     return `<tr><td style="white-space:nowrap">${dayLong(s.date)}</td><td class="num">${s.src}</td><td>Ward ${s.ward} · Team ${w.team} (${w.team_name})</td>
@@ -606,6 +638,7 @@ function renderReport() {
       Period: <b>${from ? dayLong(from) : "start"} to ${to ? dayLong(to) : "today"}</b> (Bangladesh date of submission) ·
       “Sometimes votes” counted as: <b>${state.sometimes === "voted" ? "voted" : "didn't vote"}</b><br>
       Data as of ${DATA.meta.updated_label} · Report made ${new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })}</div>
+    <div class="rsec">Overall — all wards</div>
     <div class="kpis avoid">
       <div><b>${mine.length}</b><span>surveys submitted</span></div>
       <div><b>${acc.length}</b><span>accepted (${pc(acc.length, mine.length)})</span></div>
@@ -621,6 +654,13 @@ function renderReport() {
       </tbody></table>
       <p class="ownote">Target for each group = 25% of the surveyor's ${inGroups} accepted surveys that fall in a group; female target = 30% of all ${acc.length} accepted.
         ${notIn} accepted survey(s) are not in any group (no answer to Q8, or age missing).</p></div>
+    <div class="avoid"><div class="rsec">By ward</div>
+    <p class="ownote">Each cell = accepted surveys / target. Targets per ward are the same balanced mix: 25% of the surveyor's accepted surveys
+      in that ward that fall in a group, and 30% female. V = voted, N = didn't vote. Red = below target.
+      “Ward still needs” = what the whole ward still needs from all teams to reach its quota (60: 15 per group, 18 female).</p>
+    ${wardTable(`Assigned wards (${s0.assigned.length})`, s0.assigned, "No assigned wards.")}</div>
+    ${wardTable(`Wards covered outside the assignment (${outsideWards.length})`, outsideWards, "None in this period.")}
+    <div class="rsec">Details</div>
     <h3>Rejected surveys (${rej.length})</h3>
     ${rej.length ? `<table><thead><tr><th>Date</th><th class="num">Kobo row</th><th>Ward</th><th>Reason(s)</th></tr></thead><tbody>${rejRows}</tbody></table>`
                  : '<p class="note">None in this period.</p>'}
