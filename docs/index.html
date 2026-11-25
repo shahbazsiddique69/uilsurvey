@@ -107,6 +107,9 @@
   .bul .bt span { color: var(--muted); }
   .bul .bt .need { font-weight: 600; }
   .qtbl td { vertical-align: middle; }
+  /* header row stays visible while the page scrolls (the wrapper must not be its own scroll box) */
+  .tablewrap.stickyhead { overflow: visible; }
+  .tablewrap.stickyhead .stbl th { position: sticky; top: -18px; z-index: 3; box-shadow: 0 1px 0 var(--line); }
   .qtbl tr.bad td:first-child { box-shadow: inset 4px 0 0 var(--bad); }
   /* horizontal bar chart (needed samples, report charts) */
   .hbar { display: grid; grid-template-columns: 170px 1fr 70px; align-items: center; gap: 8px; margin: 5px 0; font-size: 12.5px; }
@@ -187,10 +190,18 @@
     <span class="note" style="margin:0">Count “sometimes” (মাঝে মাঝে যাই) as</span>
     <div class="seg" id="qSometimes"><button data-v="voted" class="on">Voted</button><button data-v="not">Didn't vote</button></div>
     <label class="check" style="margin:0"><input type="checkbox" id="qAll"> Show wards with no interviews yet</label>
+    <label class="note" style="margin:0" for="qSort">Sort wards by</label>
+    <select id="qSort" style="width:auto">
+      <option value="status">Status (most urgent first)</option>
+      <option value="ward">Ward number</option>
+      <option value="team">Team (number / colour)</option>
+      <option value="surveys">Surveys done (most first)</option>
+      <option value="surveys_asc">Surveys done (fewest first)</option>
+    </select>
   </div>
   <div class="tiles" id="qTiles"></div>
   <div class="card"><h3 id="qNeedTitle">Samples still needed</h3><div id="qNeed"></div></div>
-  <div class="tablewrap"><table class="stbl qtbl" id="qTable"></table></div>
+  <div class="tablewrap stickyhead"><table class="stbl qtbl" id="qTable"></table></div>
 </section>
 
 <section class="survview" id="survView" hidden>
@@ -494,7 +505,15 @@ function renderQuotas() {
   const rows = GEO.features.map(f => ({ p: f.properties, q: wardQuota(byWard[f.properties.ward] || []) }))
     .filter(r => showAll || r.q.total > 0);
   const order = { bad: 0, warn: 1, good: 2, none: 3 };
-  rows.sort((a, b) => order[a.q.state] - order[b.q.state] || b.q.total - a.q.total || a.p.ward - b.p.ward);
+  const byWardNo = (a, b) => a.p.ward - b.p.ward;
+  const SORTS = {
+    status: (a, b) => order[a.q.state] - order[b.q.state] || b.q.total - a.q.total || byWardNo(a, b),
+    ward: byWardNo,
+    team: (a, b) => a.p.team - b.p.team || byWardNo(a, b),
+    surveys: (a, b) => b.q.total - a.q.total || byWardNo(a, b),
+    surveys_asc: (a, b) => a.q.total - b.q.total || byWardNo(a, b),
+  };
+  rows.sort(SORTS[document.getElementById("qSort").value] || SORTS.status);
 
   const nBad = rows.filter(r => r.q.state === "bad").length, nGood = rows.filter(r => r.q.state === "good").length;
   const nWarn = rows.filter(r => r.q.state === "warn").length;
@@ -785,6 +804,7 @@ async function init(geo, data) {
   renderSurveyors(); renderQuotas();
   seg("qSometimes", "sometimes");
   document.getElementById("qAll").onchange = renderQuotas;
+  document.getElementById("qSort").onchange = renderQuotas;
   const VIEWS = { map: "mapView", quotas: "quotaView", surveyors: "survView" };
   document.getElementById("tabs").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
