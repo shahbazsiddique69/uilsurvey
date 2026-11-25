@@ -184,8 +184,9 @@
 <section class="survview" id="quotaView" hidden>
   <h2 style="margin:0">Ward quotas</h2>
   <p class="note" style="margin:4px 0 0">Each ward: up to <b>60</b> accepted interviews — <b>15</b> in each of the four groups below,
-    and at least <b>30% female (18 of 60)</b>. Only registered voters are accepted (not registered = rejected, rule R13); accepted people who did not answer Q8
-    still count toward the 60 and the female share.</p>
+    and at least <b>30% female (18 of 60)</b>. Age 25+ must be registered voters (not registered = rejected, rule R13);
+    18–24 year olds are accepted either way, and a non-registered 18–24 counts as <b>18–24 · didn't vote</b>.
+    Accepted people who did not answer Q8 still count toward the 60 and the female share.</p>
   <div class="toolbar">
     <span class="note" style="margin:0">Count “sometimes” (মাঝে মাঝে যাই) as</span>
     <div class="seg" id="qSometimes"><button data-v="voted" class="on">Voted</button><button data-v="not">Didn't vote</button></div>
@@ -461,11 +462,12 @@ const QUOTA = { total: 60, perGroup: 15, femaleShare: 0.30 };
 const FEMALE_TARGET = Math.ceil(QUOTA.total * QUOTA.femaleShare);          // 18 of 60
 const GROUPS = [["o_v", "25+ · voted"], ["o_n", "25+ · didn't vote"], ["y_v", "18–24 · voted"], ["y_n", "18–24 · didn't vote"]];
 const OLD = new Set(["25-34", "35-44", "45-54", "55-64", "65+"]);
-// group of one submission; null = not in a group (not a registered voter, no Q8 answer, or age missing)
+// group of one submission; null = not in a group (no Q8 answer, age missing, or 25+ not registered)
 function group(s) {
-  if (!isRegistered(s.voter)) return null;
   const young = s.age === "18-24", old = OLD.has(s.age);
   if (!young && !old) return null;
+  if (s.voter === "Not registered") return young ? "y_n" : null;   // 18-24 not registered = has not voted
+  if (!isRegistered(s.voter)) return null;                         // "don't know" / refused voter status
   if (isVoted(s.vote)) return young ? "y_v" : "o_v";
   if (isNotVoted(s.vote)) return young ? "y_n" : "o_n";
   return null;
